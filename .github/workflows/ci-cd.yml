@@ -1,3 +1,30 @@
+# Class CI/CD — a self-contained teaching pipeline for this fork.
+#
+# What it does: lint + type-check, run the existing Jest suite grouped by client,
+# build each client, compile the desktop native layer, and build the self-hosted
+# web image. Everything must pass before the deployment stage runs.
+#
+# What it does NOT do:
+#   - It never deploys, pushes an image, or publishes a package. The final job is
+#     a placeholder that only writes a summary.
+#   - It does not test the proposed E1 "shared platform contracts" improvement.
+#     E1 is not implemented yet, so there is nothing contract-shaped to run. The
+#     per-client job split below mirrors the architecture; it is not evidence for
+#     E1. See docs/adr/0001-shared-platform-contracts.md for that work and
+#     docs/class-ci-cd.md section D for what has actually been validated.
+#
+# Overlap warning: the `quality` and `tests` jobs below largely repeat the
+# upstream workflows that are still present in this fork (.github/workflows/
+# lint.yml and test.yml, which runs the same five Jest groups with the same
+# flags). Both sets will run on a PR and consume double the CI minutes. Pick one
+# before enabling branch protection.
+#
+# Action pinning: every third-party action is pinned to a full 40-character
+# commit SHA rather than a tag, because tags can be moved to point at different
+# code. The `# vX.Y.Z` comment after each SHA records which release that commit
+# is, since the SHA alone is unreadable. All SHAs here are reused verbatim from
+# the upstream workflows in this checkout, so there is one version of each action
+# across the repo. To upgrade, copy the new SHA *and* update its version comment.
 name: Class CI/CD
 
 on:
@@ -5,11 +32,14 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Allows a manual run from the Actions tab.
   workflow_dispatch:
 
+# Read-only token: this workflow has no reason to write to the repository.
 permissions:
   contents: read
 
+# A newer push to the same branch cancels the older run still in progress.
 concurrency:
   group: class-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -22,6 +52,11 @@ env:
   CI: "true"
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Static checks. Fast, so it fails the run early on formatting or type errors.
+  # `test:types` is separate from Jest on purpose: Jest compiles each file in
+  # isolation and therefore does not type-check across project boundaries.
+  # ---------------------------------------------------------------------------
   quality:
     name: Lint and library type checks
     runs-on: ubuntu-24.04
@@ -29,21 +64,33 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Do not leave the job's token on disk for later steps to pick up.
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
+          # Single source of truth for the Node version: .nvmrc (currently v24).
           node-version-file: .nvmrc
+          # Caches the npm download cache. This speeds up `npm ci`; it does not
+          # replace it, so the lockfile is still what gets installed.
           cache: npm
       - name: Install locked dependencies
         run: npm ci
       - run: npm run lint
       - run: npm run test:types
 
+  # ---------------------------------------------------------------------------
+  # The existing Jest suite, split into five parallel groups so one slow client
+  # does not hold up the others. Each group's paths are passed to Jest as test
+  # path patterns; together they cover apps/, libs/, and bitwarden_license/.
+  # The groups intentionally match upstream test.yml so results are comparable.
+  # ---------------------------------------------------------------------------
   tests:
     name: Jest (${{ matrix.group }})
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
+      # Keep the other groups running when one fails; a single run then shows
+      # every failure instead of only the first.
       fail-fast: false
       matrix:
         include:
@@ -69,18 +116,34 @@ jobs:
         run: npm ci
       - name: Run tests with bounded memory
         env:
+          # The CLI's service container creates a data directory on startup.
+          # Point it at a per-group temporary directory so test runs cannot
+          # touch a real user's CLI data or collide with each other.
           BITWARDENCLI_APPDATA_DIR: ${{ runner.temp }}/class-cli-${{ matrix.group }}
+        # Two workers with a memory ceiling: the default worker count exhausted
+        # memory during local validation. See docs/class-ci-cd.md section D.
         run: npm test -- ${{ matrix.paths }} --ci --coverage --maxWorkers=2 --workerIdleMemoryLimit=1500MiB
       - name: Preserve test reports even on failure
+        # `!cancelled()` keeps this running after a test failure — the reports
+        # are most useful precisely when the suite went red — but skips it when
+        # the run was cancelled by the concurrency rule above.
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: class-tests-${{ matrix.group }}
+          # Both paths come from the root jest.config.js: coverage/ from
+          # coverageDirectory, junit.xml from the jest-junit reporter.
           path: |
             coverage/
             junit.xml
           retention-days: 7
 
+  # ---------------------------------------------------------------------------
+  # Production builds of the three webpack-only clients, using the same npm
+  # scripts a developer would run. This checks that shared library changes still
+  # bundle for each client; it does not produce release-ready packages (no
+  # signing, no store packaging, no versioning).
+  # ---------------------------------------------------------------------------
   builds:
     name: Build (${{ matrix.app }})
     runs-on: ubuntu-24.04
@@ -89,9 +152,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # OSS self-hosted web assets.
           - app: web
             workspace: "@bitwarden/web-vault"
             script: dist:oss:selfhost
+          # Chrome, manifest v3. Other browsers are separate build targets.
           - app: browser
             workspace: "@bitwarden/browser"
             script: build:prod:chrome
@@ -113,10 +178,19 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: class-build-${{ matrix.app }}
+          # All three clients emit to apps/<app>/build via their webpack config.
           path: apps/${{ matrix.app }}/build/
+          # Treat an empty upload as a failure: it means the build silently
+          # produced nothing rather than succeeding.
           if-no-files-found: error
           retention-days: 7
 
+  # ---------------------------------------------------------------------------
+  # Desktop is the only client with a compiled native layer (Rust via N-API) and
+  # an OS dependency, so it gets its own job. Linux is the class baseline;
+  # upstream build-desktop.yml covers macOS and Windows.
+  # These are compilation and unit checks, not a packaged or signed app.
+  # ---------------------------------------------------------------------------
   desktop:
     name: Linux desktop and native integration
     runs-on: ubuntu-24.04
@@ -132,17 +206,25 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
       - name: Install native test prerequisites
+        # The native secure-storage tests talk to a real OS keyring over D-Bus,
+        # which a bare CI runner does not have.
         run: |
           sudo apt-get update
           sudo apt-get install -y gnome-keyring dbus-x11
       - name: Install repository Rust toolchain
         working-directory: apps/desktop/desktop_native
-        # rustup reads rust-toolchain.toml in this directory.
+        # No version is passed here on purpose: rustup reads the pinned version
+        # from rust-toolchain.toml in this directory, so the toolchain stays in
+        # the repository rather than in this workflow.
         run: rustup show active-toolchain
       - name: Build native modules
         run: npm run build-native --workspace @bitwarden/desktop
       - name: Test native libraries with a session keyring
         working-directory: apps/desktop/desktop_native
+        # Start a throwaway D-Bus session, unlock a fresh keyring inside it with
+        # an empty password, then run the library tests against that keyring.
+        # --test-threads=1 because the tests share the one keyring.
+        # --locked fails if Cargo.lock would need to change.
         run: |
           mkdir -p ~/.cache ~/.local/share/keyrings
           dbus-run-session -- bash -euo pipefail -c '
@@ -151,13 +233,24 @@ jobs:
             export GNOME_KEYRING_CONTROL
             cargo test --locked --lib -- --test-threads=1
           '
+          # Doc tests need no keyring, so they run outside the D-Bus session.
           cargo test --locked --doc
       - name: Build desktop bundles sequentially to limit memory
+        # Electron has three webpack targets. Run them one at a time: in
+        # parallel they exceeded the runner's memory during validation.
         run: |
           npm run build:oss:main --workspace @bitwarden/desktop
           npm run build:oss:renderer --workspace @bitwarden/desktop
           npm run build:oss:preload --workspace @bitwarden/desktop
 
+  # ---------------------------------------------------------------------------
+  # Builds the self-hosted web container from the existing apps/web/Dockerfile.
+  #
+  # KNOWN NOT GREEN: this job has never been observed to pass. Local validation
+  # ran out of memory during the web compile inside Docker, so it is implemented
+  # but unverified (docs/class-ci-cd.md section D). Confirm it on a real runner
+  # before making the gate below a required branch-protection check.
+  # ---------------------------------------------------------------------------
   docker:
     name: Verify self-hosted web image
     runs-on: ubuntu-24.04
@@ -167,14 +260,20 @@ jobs:
         with:
           persist-credentials: false
       - name: Check out required web hosting source
+        # The web image bundles the .NET web host from bitwarden/server, so the
+        # Dockerfile needs that repository checked out at ./server as well.
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: bitwarden/server
-          # Public server revision used during local Docker validation.
+          # Pinned to the public server revision used during local Docker
+          # validation so an unrelated server change cannot break this build.
+          # Review and bump this deliberately; do not track a moving branch.
           ref: 536e655a6d4891e69ffeffc15bb52ebea307953d
           path: server
           persist-credentials: false
       - name: Record the external server revision
+        # Writes the resolved SHA into the run summary so the exact server
+        # source behind an image build is recoverable later.
         run: git -C server rev-parse HEAD >> "$GITHUB_STEP_SUMMARY"
       - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
       - name: Build image without publishing
@@ -183,16 +282,26 @@ jobs:
           context: .
           file: apps/web/Dockerfile
           platforms: linux/amd64
+          # push: false is the safety property of this whole workflow — the
+          # image is built and loaded locally, never sent to a registry.
           push: false
           load: true
           tags: class-web:ci
+          # Build arguments the Dockerfile declares; LICENSE_TYPE=oss selects
+          # the GPL build rather than the commercial one.
           build-args: |
             NODE_VERSION=24
             NPM_COMMAND=dist:oss:selfhost
             LICENSE_TYPE=oss
 
+  # ---------------------------------------------------------------------------
+  # Single gate job. Use "Class CI gate" as the one required status check in
+  # branch protection instead of listing every job and matrix leg by name.
+  # ---------------------------------------------------------------------------
   ci:
     name: Class CI gate
+    # `always()` is required so this job still runs when a dependency failed;
+    # otherwise GitHub would skip it and branch protection would see no result.
     if: ${{ always() }}
     needs: [quality, tests, builds, desktop, docker]
     runs-on: ubuntu-24.04
@@ -201,9 +310,18 @@ jobs:
       - name: Require every CI job to succeed
         env:
           RESULTS: ${{ toJSON(needs) }}
+        # Because of `always()`, this job's own success proves nothing on its
+        # own — it has to inspect the results explicitly. `jq -e` exits non-zero
+        # unless every dependency reported "success", so "skipped" and
+        # "cancelled" fail the gate too.
         run: |
           echo "$RESULTS" | jq -e 'all(.[]; .result == "success")'
 
+  # ---------------------------------------------------------------------------
+  # Placeholder standing in for a real deployment. It documents what is still
+  # missing and deploys nothing. Replace it once a hosting destination exists.
+  # Push-to-main only, so pull requests and manual runs never reach it.
+  # ---------------------------------------------------------------------------
   deployment-placeholder:
     name: Deployment placeholder (no deployment)
     needs: ci
