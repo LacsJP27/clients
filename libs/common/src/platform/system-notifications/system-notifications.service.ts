@@ -1,5 +1,7 @@
 import { Observable } from "rxjs";
 
+import { SupportStatus } from "../misc/support-status";
+
 // This is currently tailored for Chrome extension's api, if Safari works
 // differently where clicking a notification button produces a different
 // identifier we need to reconcile that here.
@@ -35,6 +37,11 @@ export type SystemNotificationEvent = {
  * A service responsible for displaying operating system level server notifications.
  */
 export abstract class SystemNotificationsService {
+  /**
+   * Describes whether system notifications are supported and, if so, provides this service.
+   */
+  abstract status(): SupportStatus<SystemNotificationsService>;
+
   /**
    * Used to know if a given platform supports system notifications. This check should
    * be used to guard any usage of the other members in this service.
