@@ -2,6 +2,7 @@ import { map, merge, Observable } from "rxjs";
 
 import { DeviceType } from "@bitwarden/common/enums";
 import { PlatformUtilsService } from "@bitwarden/common/platform/abstractions/platform-utils.service";
+import { SupportStatus } from "@bitwarden/common/platform/misc/support-status";
 import {
   ButtonLocation,
   SystemNotificationClearInfo,
@@ -72,6 +73,14 @@ export class BrowserSystemNotificationService implements SystemNotificationsServ
   async clear(clearInfo: SystemNotificationClearInfo): Promise<undefined> {
     await chrome.notifications.clear(clearInfo.id);
     return undefined;
+  }
+
+  status(): SupportStatus<SystemNotificationsService> {
+    if (!this.isSupported()) {
+      return { type: "not-supported", reason: "client-not-supported" };
+    }
+
+    return { type: "supported", service: this };
   }
 
   isSupported(): boolean {

@@ -1,5 +1,6 @@
 import { throwError } from "rxjs";
 
+import { SupportStatus } from "../misc/support-status";
 import {
   SystemNotificationClearInfo,
   SystemNotificationCreateInfo,
@@ -8,6 +9,10 @@ import {
 
 export class UnsupportedSystemNotificationsService implements SystemNotificationsService {
   notificationClicked$ = throwError(() => new Error("Notification clicked is not supported."));
+
+  status(): SupportStatus<SystemNotificationsService> {
+    return { type: "not-supported", reason: "client-not-supported" };
+  }
 
   async create(createInfo: SystemNotificationCreateInfo): Promise<string> {
     throw new Error("Create OS Notification unsupported.");
