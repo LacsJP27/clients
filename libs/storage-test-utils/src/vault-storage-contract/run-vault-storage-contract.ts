@@ -1,5 +1,7 @@
 import { VaultStorage, VaultStorageErrorCode, VaultStorageUpdate } from "@bitwarden/storage-core";
 
+import { ContractTestApi, globalTestApi } from "../contract-testing/test-api";
+
 import { assertDeepEqual, assertRejectsWith, assertTrue, awaitAll, fail } from "./assertions";
 
 /**
@@ -26,16 +28,6 @@ export type VaultStorageFailureHook<S extends VaultStorage> = (
   key: string,
 ) => void | Promise<void>;
 
-type TestBody = () => void | Promise<void>;
-
-/** The runner functions the suite needs. Jest, Vitest (globals), Mocha, and Jasmine all qualify. */
-export interface ContractTestApi {
-  describe(name: string, body: () => void): void;
-  it: ((name: string, body: TestBody) => void) & { skip(name: string, body: TestBody): void };
-  beforeEach(body: TestBody): void;
-  afterEach(body: TestBody): void;
-}
-
 export interface VaultStorageContractOptions<S extends VaultStorage> {
   /** Runs after each test with that test's instance (close handles, delete temp profiles, …). */
   cleanup?: (storage: S) => void | Promise<void>;
@@ -60,7 +52,8 @@ export function runVaultStorageContract<S extends VaultStorage>(
   createStorage: () => S | Promise<S>,
   options: VaultStorageContractOptions<S> = {},
 ): void {
-  const { describe, it, beforeEach, afterEach } = options.testApi ?? globalTestApi();
+  const { describe, it, beforeEach, afterEach } =
+    options.testApi ?? globalTestApi("runVaultStorageContract");
 
   let storage: S;
   let subscriptions: Array<{ unsubscribe(): void }> = [];
@@ -551,19 +544,4 @@ export function runVaultStorageContract<S extends VaultStorage>(
       });
     });
   });
-}
-
-function globalTestApi(): ContractTestApi {
-  const candidate = globalThis as unknown as Partial<ContractTestApi>;
-  if (
-    typeof candidate.describe !== "function" ||
-    typeof candidate.it !== "function" ||
-    typeof candidate.beforeEach !== "function" ||
-    typeof candidate.afterEach !== "function"
-  ) {
-    throw new Error(
-      "runVaultStorageContract needs describe/it/beforeEach/afterEach globals; pass options.testApi when the runner does not provide them",
-    );
-  }
-  return candidate as ContractTestApi;
 }

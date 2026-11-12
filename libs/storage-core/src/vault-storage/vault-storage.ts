@@ -1,5 +1,8 @@
 import { Observable } from "rxjs";
 
+/** The operations of {@link VaultStorage}, used when reporting or injecting failures. */
+export type VaultStorageOperation = "get" | "has" | "save" | "remove";
+
 /** Kind of change reported by {@link VaultStorage.updates$}. */
 export type VaultStorageUpdateType = "save" | "remove";
 

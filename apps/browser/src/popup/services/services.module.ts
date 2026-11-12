@@ -124,6 +124,10 @@ import {
   ObservableStorageService,
 } from "@bitwarden/common/platform/abstractions/storage.service";
 import { ActionsService } from "@bitwarden/common/platform/actions";
+import {
+  SecureStorageCapability,
+  UnsupportedSecureStorageCapability,
+} from "@bitwarden/common/platform/capabilities/secure-storage.capability";
 import { IpcService } from "@bitwarden/common/platform/ipc";
 import { Message, MessageListener, MessageSender } from "@bitwarden/common/platform/messaging";
 // eslint-disable-next-line no-restricted-imports -- Used for dependency injection
@@ -188,6 +192,7 @@ import {
 import { FlightRecorderLogRecorderService } from "@bitwarden/logging-angular";
 import { DerivedStateProvider, GlobalStateProvider, StateProvider } from "@bitwarden/state";
 import { InlineDerivedStateProvider } from "@bitwarden/state-internal";
+import { VaultStorage } from "@bitwarden/storage-core";
 import { SHARE_ITEM_PRESENTER, SHARE_PASSWORD_REPROMPT } from "@bitwarden/tools-share";
 import {
   AutoUnlockService,
@@ -254,6 +259,7 @@ import { BrowserForegroundSdkClientFactory } from "../../platform/services/sdk/b
 import { BrowserSdkLoadService } from "../../platform/services/sdk/browser-sdk-load.service";
 import { ForegroundTaskSchedulerService } from "../../platform/services/task-scheduler/foreground-task-scheduler.service";
 import { BrowserStorageServiceProvider } from "../../platform/storage/browser-storage-service.provider";
+import { BrowserVaultStorage } from "../../platform/storage/browser-vault-storage";
 import { ForegroundMemoryStorageService } from "../../platform/storage/foreground-memory-storage.service";
 import { ForegroundSyncService } from "../../platform/sync/foreground-sync.service";
 import {
@@ -570,6 +576,18 @@ const safeProviders: SafeProvider[] = [
   safeProvider({
     provide: OBSERVABLE_DISK_STORAGE,
     useExisting: AbstractStorageService,
+  }),
+  // Platform contracts (ADR-0001). The extension has no protected storage, and says so rather
+  // than registering ordinary storage as secure.
+  safeProvider({
+    provide: VaultStorage,
+    useClass: BrowserVaultStorage,
+    deps: [AbstractStorageService],
+  }),
+  safeProvider({
+    provide: SecureStorageCapability,
+    useClass: UnsupportedSecureStorageCapability,
+    deps: [],
   }),
   safeProvider({
     provide: FileDownloadService,

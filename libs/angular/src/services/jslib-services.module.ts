@@ -202,6 +202,7 @@ import { EventUploadService } from "@bitwarden/common/dirt/event-logs/services/e
 import { PasskeyDirectoryApiService } from "@bitwarden/common/dirt/services/abstractions/passkey-directory-api.service";
 import { DefaultPasskeyDirectoryApiService } from "@bitwarden/common/dirt/services/default-passkey-directory-api.service";
 import { HibpApiService } from "@bitwarden/common/dirt/services/hibp-api.service";
+import { ClientType } from "@bitwarden/common/enums";
 import { AccountCryptographicStateService } from "@bitwarden/common/key-management/account-cryptography/account-cryptographic-state.service";
 import { DefaultAccountCryptographicStateService } from "@bitwarden/common/key-management/account-cryptography/default-account-cryptographic-state.service";
 import { DeviceTrustServiceAbstraction } from "@bitwarden/common/key-management/device-trust/abstractions/device-trust.service.abstraction";
@@ -262,6 +263,10 @@ import { SystemService } from "@bitwarden/common/platform/abstractions/system.se
 import { ValidationService as ValidationServiceAbstraction } from "@bitwarden/common/platform/abstractions/validation.service";
 import { ActionsService } from "@bitwarden/common/platform/actions";
 import { UnsupportedActionsService } from "@bitwarden/common/platform/actions/unsupported-actions.service";
+import {
+  DefaultSystemNotificationsCapability,
+  SystemNotificationsCapability,
+} from "@bitwarden/common/platform/capabilities/system-notifications.capability";
 import { Message, MessageListener, MessageSender } from "@bitwarden/common/platform/messaging";
 // eslint-disable-next-line no-restricted-imports -- Used for dependency injection
 import { SubjectMessageSender } from "@bitwarden/common/platform/messaging/internal";
@@ -384,9 +389,11 @@ import {
   DefaultBiometricStateService,
   DefaultKdfConfigService,
   DefaultKeyService,
+  DefaultSystemAuthenticationCapability,
   DefaultUserAsymmetricKeysRegenerationService,
   KdfConfigService,
   KeyService,
+  SystemAuthenticationCapability,
   UserAsymmetricKeysRegenerationService,
 } from "@bitwarden/key-management";
 // eslint-disable-next-line no-restricted-imports
@@ -480,6 +487,7 @@ import { PremiumInterestStateService } from "../billing/services/premium-interes
 import { DefaultEncryptedMigrationsSchedulerService } from "../key-management/encrypted-migration/encrypted-migrations-scheduler.service";
 import { EncryptedMigrationsSchedulerService } from "../key-management/encrypted-migration/encrypted-migrations-scheduler.service.abstraction";
 import { FormValidationErrorsService as FormValidationErrorsServiceAbstraction } from "../platform/abstractions/form-validation-errors.service";
+import { validateRegisteredPlatformContracts } from "../platform/contracts/validate-registered-platform-contracts";
 import { DocumentLangSetter } from "../platform/i18n";
 import { FormValidationErrorsService } from "../platform/services/form-validation-errors.service";
 import { LoggingErrorHandler } from "../platform/services/logging-error-handler";
@@ -1235,6 +1243,26 @@ const safeProviders: SafeProvider[] = [
     provide: SystemNotificationsService,
     useClass: UnsupportedSystemNotificationsService,
     deps: [],
+  }),
+  // Platform capabilities (ADR-0001) whose implementation is the same in every Angular client,
+  // because it reports on a service each client already registers. The storage contracts differ
+  // per client and are registered in each client's own provider module.
+  safeProvider({
+    provide: SystemNotificationsCapability,
+    useClass: DefaultSystemNotificationsCapability,
+    deps: [SystemNotificationsService],
+  }),
+  safeProvider({
+    provide: SystemAuthenticationCapability,
+    useClass: DefaultSystemAuthenticationCapability,
+    deps: [BiometricsService],
+  }),
+  safeProvider({
+    provide: APP_INITIALIZER as SafeInjectionToken<() => void>,
+    useFactory: (injector: Injector, clientType: ClientType) => () =>
+      validateRegisteredPlatformContracts(clientType, injector),
+    deps: [Injector, CLIENT_TYPE],
+    multi: true,
   }),
   safeProvider({
     provide: PendingAuthRequestsStateService,

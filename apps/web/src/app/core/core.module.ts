@@ -106,6 +106,10 @@ import { SdkLoadService } from "@bitwarden/common/platform/abstractions/sdk/sdk-
 import { SdkService } from "@bitwarden/common/platform/abstractions/sdk/sdk.service";
 import { AbstractStorageService } from "@bitwarden/common/platform/abstractions/storage.service";
 import { SystemService } from "@bitwarden/common/platform/abstractions/system.service";
+import {
+  SecureStorageCapability,
+  UnsupportedSecureStorageCapability,
+} from "@bitwarden/common/platform/capabilities/secure-storage.capability";
 import { IpcService } from "@bitwarden/common/platform/ipc";
 // eslint-disable-next-line no-restricted-imports -- Needed for DI
 import {
@@ -150,7 +154,7 @@ import {
   LegacyCompatKeyService,
 } from "@bitwarden/legacy-crypto";
 import { OrganizationInviteLinkApiService } from "@bitwarden/organization-invite-link";
-import { SerializedMemoryStorageService } from "@bitwarden/storage-core";
+import { SerializedMemoryStorageService, VaultStorage } from "@bitwarden/storage-core";
 import {
   CipherShareAccessService,
   SHARE_ITEM_PRESENTER,
@@ -211,6 +215,7 @@ import { WebMigrationRunner } from "../platform/web-migration-runner";
 import { WebSdkLoadService } from "../platform/web-sdk-load.service";
 import { WebStorageServiceProvider } from "../platform/web-storage-service.provider";
 import { WebSystemService } from "../platform/web-system.service";
+import { WebVaultStorage } from "../platform/web-vault-storage";
 
 import { InitService } from "./init.service";
 import { ENV_URLS } from "./injection-tokens";
@@ -304,6 +309,18 @@ const safeProviders: SafeProvider[] = [
   safeProvider({
     provide: OBSERVABLE_DISK_STORAGE,
     useFactory: () => new WindowStorageService(window.sessionStorage),
+    deps: [],
+  }),
+  // Platform contracts (ADR-0001). The web vault has no protected storage, and says so rather
+  // than registering ordinary storage as secure.
+  safeProvider({
+    provide: VaultStorage,
+    useClass: WebVaultStorage,
+    deps: [OBSERVABLE_DISK_STORAGE],
+  }),
+  safeProvider({
+    provide: SecureStorageCapability,
+    useClass: UnsupportedSecureStorageCapability,
     deps: [],
   }),
   safeProvider({

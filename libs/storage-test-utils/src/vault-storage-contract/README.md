@@ -71,11 +71,17 @@ those.
 
 ## Platform neutrality
 
-This folder and `libs/storage-core/src/vault-storage` must not reference browser-extension, desktop,
-or Node APIs. `npm run lint:platform-neutral` (part of `npm run lint`) enforces this in two ways:
+The shared contract code must not reference browser-extension, desktop, or Node APIs: the
+`vault-storage` and `secure-storage` folders of `libs/storage-core`, and the `contract-testing`,
+`vault-storage-contract`, and `secure-storage-contract` folders here. `npm run
+lint:platform-neutral` (part of `npm run lint`) enforces this in two ways:
 
 1. A text scan rejects `chrome`, `electron`, `node:`, `fs`, and `Buffer`.
 2. `tsc` runs with `tsconfig.platform-neutral.json` (`lib: ["ES2022"]`, `types: []`).
 
-`in-memory-vault-storage.contract.spec.ts` is excluded from the type check because it uses Jest's
-`expect`. The text scan still covers it.
+Spec files that use Jest's `expect` are excluded from the type check. The text scan still covers
+them.
+
+`SecureStorage` has the same kind of suite, `runSecureStorageContract`, in
+`../secure-storage-contract`. For the adapters each client registers, see
+[`docs/platform-contracts.md`](../../../../docs/platform-contracts.md).

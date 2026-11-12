@@ -69,7 +69,7 @@ client actually needs it. Boundaries between apps and libraries are enforced —
 - `README.md` — project overview and links.
 - `CONTRIBUTING.md` — contribution process.
 - `docs/` — repository-local documentation (`cipher-types.md`, `using-nx-to-build-projects.md`,
-  `class-ci-cd.md`).
+  `class-ci-cd.md`, `platform-contracts.md`).
 - `docs/adr/` — architecture decision records recorded in this repository. Read
   `docs/adr/README.md` before adding one. Upstream Bitwarden ADRs live separately at
   [contributing.bitwarden.com/architecture/adr](https://contributing.bitwarden.com/architecture/adr/)
@@ -131,3 +131,7 @@ boundary between shared application logic and platform-specific behavior: platfo
 in shared libraries, client-specific adapters, registration during client bootstrap, explicit
 capability-status reporting, and one shared behavioral test suite per contract. If you are adding
 code that imports a Chrome, Electron, or Node API from shared library code, read that ADR first.
+
+[docs/platform-contracts.md](./docs/platform-contracts.md) maps that ADR onto the code: the
+contracts that exist, each client's adapter, where it is registered, and how it is tested. A new
+adapter must run the contract's shared suite from a `*.contract.spec.ts` beside it.

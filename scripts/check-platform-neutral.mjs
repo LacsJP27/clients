@@ -14,10 +14,13 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 const targets = [
   {
-    name: "VaultStorage contract (C3), suite (C6), and InMemoryVaultStorage (C5)",
+    name: "Storage contracts, their suites, adapters, and reference implementations",
     directories: [
       "libs/storage-core/src/vault-storage",
+      "libs/storage-core/src/secure-storage",
+      "libs/storage-test-utils/src/contract-testing",
       "libs/storage-test-utils/src/vault-storage-contract",
+      "libs/storage-test-utils/src/secure-storage-contract",
     ],
     tsconfig: "libs/storage-test-utils/tsconfig.platform-neutral.json",
   },

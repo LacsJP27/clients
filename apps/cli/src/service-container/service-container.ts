@@ -116,6 +116,12 @@ import { GovModeService } from "@bitwarden/common/platform/abstractions/gov-mode
 import { RegisterSdkService } from "@bitwarden/common/platform/abstractions/sdk/register-sdk.service";
 import { SdkLoadService } from "@bitwarden/common/platform/abstractions/sdk/sdk-load.service";
 import { SdkService } from "@bitwarden/common/platform/abstractions/sdk/sdk.service";
+import { SecureStorageCapability } from "@bitwarden/common/platform/capabilities/secure-storage.capability";
+import {
+  DefaultSystemNotificationsCapability,
+  SystemNotificationsCapability,
+} from "@bitwarden/common/platform/capabilities/system-notifications.capability";
+import { validatePlatformContracts } from "@bitwarden/common/platform/capabilities/validate-platform-contracts";
 import { LogLevelType } from "@bitwarden/common/platform/enums";
 import { MessageListener, MessageSender } from "@bitwarden/common/platform/messaging";
 import {
@@ -141,6 +147,7 @@ import { StorageServiceProvider } from "@bitwarden/common/platform/services/stor
 import { SyncService } from "@bitwarden/common/platform/sync";
 // eslint-disable-next-line no-restricted-imports -- Needed for service construction
 import { DefaultSyncService } from "@bitwarden/common/platform/sync/internal";
+import { UnsupportedSystemNotificationsService } from "@bitwarden/common/platform/system-notifications/unsupported-system-notifications.service";
 import { ProviderApiServiceAbstraction } from "@bitwarden/common/provider";
 import { ProviderApiService } from "@bitwarden/common/provider/services/provider-api.service";
 import { ProviderService } from "@bitwarden/common/provider/services/provider.service";
@@ -197,6 +204,8 @@ import {
   DefaultKeyService as KeyService,
   BiometricStateService,
   DefaultBiometricStateService,
+  DefaultSystemAuthenticationCapability,
+  SystemAuthenticationCapability,
 } from "@bitwarden/key-management";
 // eslint-disable-next-line no-restricted-imports
 import {
@@ -233,7 +242,7 @@ import {
   DefaultStateProvider,
   DefaultStateService,
 } from "@bitwarden/state-internal";
-import { SerializedMemoryStorageService } from "@bitwarden/storage-core";
+import { SerializedMemoryStorageService, VaultStorage } from "@bitwarden/storage-core";
 import {
   AutoUnlockService,
   DefaultAutoUnlockService,
@@ -262,12 +271,20 @@ import { devFlagEnabled, devFlagValue, flagEnabled } from "../platform/flags";
 import { CliIpcService } from "../platform/services/cli-ipc.service";
 import { CliPlatformUtilsService } from "../platform/services/cli-platform-utils.service";
 import { CliSdkLoadService } from "../platform/services/cli-sdk-load.service";
+import {
+  CliSecureStorage,
+  CliSecureStorageCapability,
+} from "../platform/services/cli-secure-storage.capability";
 import { CliSystemService } from "../platform/services/cli-system.service";
+import { CliVaultStorage } from "../platform/services/cli-vault-storage";
 import { ConsoleLogService } from "../platform/services/console-log.service";
 import { I18nService } from "../platform/services/i18n.service";
 import { LowdbStorageService } from "../platform/services/lowdb-storage.service";
 import { NodeApiService } from "../platform/services/node-api.service";
-import { NodeEnvSecureStorageService } from "../platform/services/node-env-secure-storage.service";
+import {
+  NodeEnvSecureStorageService,
+  PROTECTED_STORAGE_KEY_PREFIX,
+} from "../platform/services/node-env-secure-storage.service";
 import { CliRestrictedItemTypesService } from "../vault/services/cli-restricted-item-types.service";
 
 // eslint-disable-next-line
@@ -286,6 +303,11 @@ export class ServiceContainer {
   messagingService: MessageSender;
   storageService: LowdbStorageService;
   secureStorageService: NodeEnvSecureStorageService;
+  /** Platform contracts (ADR-0001) registered for the CLI. */
+  vaultStorage: VaultStorage;
+  secureStorageCapability: SecureStorageCapability;
+  systemNotificationsCapability: SystemNotificationsCapability;
+  systemAuthenticationCapability: SystemAuthenticationCapability;
   memoryStorageService: MemoryStorageService;
   memoryStorageForStateProviders: SerializedMemoryStorageService;
   migrationRunner: MigrationRunner;
@@ -444,6 +466,19 @@ export class ServiceContainer {
       // MAC failures for secure storage.
       new EncryptServiceImplementation(this.cryptoFunctionService, this.logService, false),
     );
+    this.vaultStorage = new CliVaultStorage(this.storageService);
+    const hasSessionKey = () => process.env.BW_SESSION != null;
+    this.secureStorageCapability = new CliSecureStorageCapability(
+      new CliSecureStorage(
+        this.secureStorageService,
+        (key) => this.storageService.has(PROTECTED_STORAGE_KEY_PREFIX + key),
+        hasSessionKey,
+      ),
+      hasSessionKey,
+    );
+    this.systemNotificationsCapability = new DefaultSystemNotificationsCapability(
+      new UnsupportedSystemNotificationsService(),
+    );
 
     this.memoryStorageService = new MemoryStorageService();
     this.memoryStorageForStateProviders = new SerializedMemoryStorageService();
@@ -599,6 +634,15 @@ export class ServiceContainer {
       this.ipcService,
       () => this.configService,
     );
+    this.systemAuthenticationCapability = new DefaultSystemAuthenticationCapability(
+      this.biometricsService,
+    );
+    validatePlatformContracts("cli", {
+      VaultStorage: this.vaultStorage,
+      SecureStorageCapability: this.secureStorageCapability,
+      SystemNotificationsCapability: this.systemNotificationsCapability,
+      SystemAuthenticationCapability: this.systemAuthenticationCapability,
+    });
 
     this.keyService = new KeyService(
       this.cryptoFunctionService,

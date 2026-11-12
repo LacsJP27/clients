@@ -160,6 +160,15 @@ import {
 } from "@bitwarden/common/platform/abstractions/storage.service";
 import { SystemService as SystemServiceAbstraction } from "@bitwarden/common/platform/abstractions/system.service";
 import { ActionsService } from "@bitwarden/common/platform/actions/actions-service";
+import {
+  SecureStorageCapability,
+  UnsupportedSecureStorageCapability,
+} from "@bitwarden/common/platform/capabilities/secure-storage.capability";
+import {
+  DefaultSystemNotificationsCapability,
+  SystemNotificationsCapability,
+} from "@bitwarden/common/platform/capabilities/system-notifications.capability";
+import { validatePlatformContracts } from "@bitwarden/common/platform/capabilities/validate-platform-contracts";
 import { IpcService } from "@bitwarden/common/platform/ipc";
 import {
   IntraprocessMessageSender,
@@ -282,8 +291,10 @@ import {
   DefaultBiometricStateService,
   DefaultKdfConfigService,
   DefaultKeyService,
+  DefaultSystemAuthenticationCapability,
   KdfConfigService,
   KeyService as KeyServiceAbstraction,
+  SystemAuthenticationCapability,
 } from "@bitwarden/key-management";
 // eslint-disable-next-line no-restricted-imports
 import {
@@ -322,6 +333,7 @@ import {
   DefaultStateService,
   InlineDerivedStateProvider,
 } from "@bitwarden/state-internal";
+import { VaultStorage } from "@bitwarden/storage-core";
 import { AutoUnlockService, DefaultAutoUnlockService, LockService } from "@bitwarden/unlock";
 import {
   IndividualVaultExportService,
@@ -417,6 +429,7 @@ import { BrowserSdkLoadService } from "../platform/services/sdk/browser-sdk-load
 import { BackgroundTaskSchedulerService } from "../platform/services/task-scheduler/background-task-scheduler.service";
 import { BackgroundMemoryStorageService } from "../platform/storage/background-memory-storage.service";
 import { BrowserStorageServiceProvider } from "../platform/storage/browser-storage-service.provider";
+import { BrowserVaultStorage } from "../platform/storage/browser-vault-storage";
 import { OffscreenStorageService } from "../platform/storage/offscreen-storage.service";
 import { SyncServiceListener } from "../platform/sync/sync-service.listener";
 import {
@@ -436,6 +449,11 @@ export default class MainBackground {
   messagingService: MessageSender;
   storageService: BrowserLocalStorageService;
   secureStorageService: AbstractStorageService;
+  /** Platform contracts (ADR-0001) registered for the extension's background context. */
+  vaultStorage: VaultStorage;
+  secureStorageCapability: SecureStorageCapability;
+  systemNotificationsCapability: SystemNotificationsCapability;
+  systemAuthenticationCapability: SystemAuthenticationCapability;
   memoryStorageService: AbstractStorageService;
   memoryStorageForStateProviders: AbstractStorageService & ObservableStorageService;
   largeObjectMemoryStorageForStateProviders: AbstractStorageService & ObservableStorageService;
@@ -690,6 +708,9 @@ export default class MainBackground {
     );
 
     this.secureStorageService = this.storageService; // secure storage is not supported in browsers, so we use local storage and warn users when it is used
+    this.vaultStorage = new BrowserVaultStorage(this.storageService);
+    // The contract reports the absence of protected storage instead of standing in for it.
+    this.secureStorageCapability = new UnsupportedSecureStorageCapability();
 
     if (BrowserApi.isManifestVersion(3)) {
       // manifest v3 can reuse the same storage. They are split for v2 due to lacking a good sync mechanism, which isn't true for v3
@@ -893,6 +914,9 @@ export default class MainBackground {
     );
     // Temporary dependency cycle workaround, until browser biometrics is replaced by shared unlock
     this.biometricsService = browserBiometricsService;
+    this.systemAuthenticationCapability = new DefaultSystemAuthenticationCapability(
+      this.biometricsService,
+    );
 
     this.keyService = new DefaultKeyService(
       this.cryptoFunctionService,
@@ -1504,6 +1528,15 @@ export default class MainBackground {
     } else {
       this.systemNotificationService = new UnsupportedSystemNotificationsService();
     }
+    this.systemNotificationsCapability = new DefaultSystemNotificationsCapability(
+      this.systemNotificationService,
+    );
+    validatePlatformContracts("browser", {
+      VaultStorage: this.vaultStorage,
+      SecureStorageCapability: this.secureStorageCapability,
+      SystemNotificationsCapability: this.systemNotificationsCapability,
+      SystemAuthenticationCapability: this.systemAuthenticationCapability,
+    });
 
     this.pendingAuthRequestStateService = new PendingAuthRequestsStateService(this.stateProvider);
 
