@@ -1,5 +1,5 @@
-# Class CI/CD pipeline: lint, type-check, test, and build every client, then run a
-# deployment placeholder on main. Nothing is deployed or published.
+# Class CI/CD pipeline: lint, type-check, test, and build every client.
+# Nothing is deployed or published.
 # See docs/class-ci-cd.md for what has and has not been validated.
 #
 # The `quality` and `tests` jobs overlap with upstream lint.yml and test.yml.
@@ -265,18 +265,3 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
         run: echo "$NEEDS" | jq -e 'all(.[]; .result == "success")'
-
-  # Placeholder for a real deployment; only runs on pushes to main.
-  deploy:
-    name: Deployment placeholder
-    runs-on: ubuntu-24.04
-    needs: ci
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-    steps:
-      - name: Describe remaining deployment setup
-        run: |
-          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
-          CI passed. No application was deployed and no image was published.
-          To deploy, choose a hosting destination, configure a protected GitHub
-          environment and secrets, and replace this job with a real deployment.
-          SUMMARY
