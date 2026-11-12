@@ -170,6 +170,11 @@ module.exports.buildConfig = function buildConfig(params) {
         { from: path.resolve(__dirname, "src/favicon.ico") },
         { from: path.resolve(__dirname, "src/browserconfig.xml") },
         { from: path.resolve(__dirname, "src/app-id.json") },
+        {
+          from: path.resolve(__dirname, "src/apple-app-site-association"),
+          to: ".well-known/apple-app-site-association",
+          toType: "file",
+        },
         { from: path.resolve(__dirname, "src/images"), to: "images" },
         { from: path.resolve(__dirname, "src/images/icons"), to: "images" },
         { from: path.resolve(__dirname, "src/videos"), to: "videos" },
@@ -429,7 +434,9 @@ module.exports.buildConfig = function buildConfig(params) {
       },
       minimize: NODE_ENV === "production",
       minimizer: [
+        // Bound memory use on CI runners and Docker VMs with many visible CPUs.
         new TerserPlugin({
+          parallel: 2,
           terserOptions: {
             safari10: true,
             // Replicate Angular CLI behaviour

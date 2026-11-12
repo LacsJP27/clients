@@ -4,6 +4,10 @@
 ARG NODE_VERSION=24
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine AS node-build
 
+# Native npm dependencies may need compilation when no prebuilt binary exists.
+# These tools remain in the build stage, not the runtime image.
+RUN apk add --no-cache python3 make g++
+
 WORKDIR /source
 COPY package*.json ./
 COPY . .
@@ -33,7 +37,7 @@ RUN npm run ${NPM_COMMAND}
 ###############################################
 #                Build stage 2                #
 ###############################################
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0-alpine3.23 AS build
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0-alpine3.24 AS build
 
 # Docker buildx supplies the value for this arg
 ARG TARGETPLATFORM
@@ -73,7 +77,7 @@ WORKDIR /app
 ###############################################
 #                  App stage                  #
 ###############################################
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine3.23
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine3.24
 
 ARG TARGETPLATFORM
 LABEL com.bitwarden.product="bitwarden"

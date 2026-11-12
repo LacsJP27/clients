@@ -9,3 +9,4 @@ export * from "./storage-service.provider";
 // Renamed to just "StorageService", to be removed when references are updated
 export { StorageService as AbstractStorageService } from "./storage.service";
 export * from "./storage.service";
+export * from "./vault-storage";
