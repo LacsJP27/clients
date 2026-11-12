@@ -14,7 +14,8 @@
   "homepage": "https://bitwarden.com",
   "scripts": {
     "prepare": "husky",
-    "lint": "eslint . --cache --cache-strategy content && prettier --check .",
+    "lint": "eslint . --cache --cache-strategy content && prettier --check . && npm run lint:platform-neutral",
+    "lint:platform-neutral": "node scripts/check-platform-neutral.mjs",
     "lint:fix": "eslint . --cache --cache-strategy content --fix",
     "lint:clear": "rimraf .eslintcache",
     "lint:rust": "node scripts/lint-rust.mjs",
