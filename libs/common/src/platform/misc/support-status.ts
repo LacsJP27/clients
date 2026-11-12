@@ -17,6 +17,15 @@ export type NotSupported = { type: "not-supported"; reason: string };
 export type NeedsConfiguration = { type: "needs-configuration"; reason: string };
 
 /**
+ * Indicates that the given set of actions is supported on this client and
+ * needs nothing from the user, but cannot be used right now, for example
+ * because a device is disconnected or a companion application is not running.
+ * It may become supported again without any configuration. The reason property
+ * should contain a documented and machine readable string.
+ */
+export type Unavailable = { type: "unavailable"; reason: string };
+
+/**
  * Indicates that the actions in the service property are supported.
  */
 export type Supported<T> = { type: "supported"; service: T };
@@ -24,14 +33,14 @@ export type Supported<T> = { type: "supported"; service: T };
 /**
  * A type encapsulating the status of support for a service.
  */
-export type SupportStatus<T> = Supported<T> | NeedsConfiguration | NotSupported;
+export type SupportStatus<T> = Supported<T> | NeedsConfiguration | Unavailable | NotSupported;
 
 /**
  * Projects each source value to one of the given projects defined in `selectors`.
  *
  * @param selectors.supported The function to run when the given item reports that it is supported
- * @param selectors.notSupported The function to run when the given item reports that it is either not-supported
- *   or needs-configuration.
+ * @param selectors.notSupported The function to run when the given item reports that it is not-supported,
+ *   needs-configuration, or unavailable.
  * @returns A function that returns an Observable that emits the result of one of the given projection functions.
  */
 export function supportSwitch<TService, TSupported, TNotSupported>(selectors: {

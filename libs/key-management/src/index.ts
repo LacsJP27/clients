@@ -6,6 +6,7 @@ export { BiometricsStatus } from "./biometrics/biometrics-status";
 export { BiometricsCommands } from "./biometrics/biometrics-commands";
 export { BiometricsService } from "./biometrics/biometric.service";
 export * from "./biometrics/biometric.state";
+export * from "./biometrics/system-authentication.capability";
 
 export { CipherDecryptionKeys, KeyService, SdkUnlockData } from "./abstractions/key.service";
 export { DefaultKeyService } from "./key.service";

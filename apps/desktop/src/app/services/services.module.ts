@@ -109,6 +109,7 @@ import { SdkService } from "@bitwarden/common/platform/abstractions/sdk/sdk.serv
 import { StateService as StateServiceAbstraction } from "@bitwarden/common/platform/abstractions/state.service";
 import { AbstractStorageService } from "@bitwarden/common/platform/abstractions/storage.service";
 import { SystemService as SystemServiceAbstraction } from "@bitwarden/common/platform/abstractions/system.service";
+import { SecureStorageCapability } from "@bitwarden/common/platform/capabilities/secure-storage.capability";
 import { IpcService } from "@bitwarden/common/platform/ipc";
 import { Message, MessageListener, MessageSender } from "@bitwarden/common/platform/messaging";
 // eslint-disable-next-line no-restricted-imports -- Used for dependency injection
@@ -151,7 +152,7 @@ import {
   WebCryptoFunctionService,
 } from "@bitwarden/legacy-crypto";
 import { FlightRecorderLogRecorderService } from "@bitwarden/logging-angular";
-import { SerializedMemoryStorageService } from "@bitwarden/storage-core";
+import { SerializedMemoryStorageService, VaultStorage } from "@bitwarden/storage-core";
 import {
   CipherShareAccessService,
   SHARE_ITEM_PRESENTER,
@@ -199,7 +200,9 @@ import { RendererBiometricsService } from "../../key-management/biometrics/rende
 import { DesktopLockComponentService } from "../../key-management/lock/services/desktop-lock-component.service";
 import { DesktopSessionTimeoutTypeService } from "../../key-management/session-timeout/services/desktop-session-timeout-type.service";
 import { flagEnabled } from "../../platform/flags";
+import { DesktopSecureStorageCapability } from "../../platform/services/desktop-secure-storage.capability";
 import { DesktopSettingsService } from "../../platform/services/desktop-settings.service";
+import { DesktopVaultStorage } from "../../platform/services/desktop-vault-storage";
 import { ElectronLogRendererService } from "../../platform/services/electron-log.renderer.service";
 import {
   ELECTRON_SUPPORTS_SECURE_STORAGE,
@@ -381,6 +384,17 @@ const safeProviders: SafeProvider[] = [
     deps: [],
   }),
   safeProvider({ provide: OBSERVABLE_DISK_STORAGE, useExisting: AbstractStorageService }),
+  // Platform contracts (ADR-0001), over the renderer's existing bridges to the main process.
+  safeProvider({
+    provide: VaultStorage,
+    useClass: DesktopVaultStorage,
+    deps: [AbstractStorageService],
+  }),
+  safeProvider({
+    provide: SecureStorageCapability,
+    useClass: DesktopSecureStorageCapability,
+    deps: [SECURE_STORAGE, SUPPORTS_SECURE_STORAGE],
+  }),
   safeProvider({
     provide: SystemServiceAbstraction,
     useClass: SystemService,

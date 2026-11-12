@@ -8,6 +8,9 @@ import { Utils } from "@bitwarden/common/platform/misc/utils";
 // eslint-disable-next-line no-restricted-imports
 import { EncArrayBuffer, EncryptService, SymmetricCryptoKey } from "@bitwarden/legacy-crypto";
 
+/** Prefix of the keys under which protected values are kept in the CLI's ordinary storage. */
+export const PROTECTED_STORAGE_KEY_PREFIX = "__PROTECTED__";
+
 export class NodeEnvSecureStorageService implements AbstractStorageService {
   constructor(
     private storageService: AbstractStorageService,
@@ -115,6 +118,6 @@ export class NodeEnvSecureStorageService implements AbstractStorageService {
   }
 
   private makeProtectedStorageKey(key: string) {
-    return "__PROTECTED__" + key;
+    return PROTECTED_STORAGE_KEY_PREFIX + key;
   }
 }

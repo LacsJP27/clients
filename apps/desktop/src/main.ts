@@ -21,6 +21,7 @@ import {
 } from "@bitwarden/common/key-management/shared-unlock";
 import { RegionConfig } from "@bitwarden/common/platform/abstractions/environment.service";
 import { SdkLoadService } from "@bitwarden/common/platform/abstractions/sdk/sdk-load.service";
+import { validatePlatformContracts } from "@bitwarden/common/platform/capabilities/validate-platform-contracts";
 import { IpcService } from "@bitwarden/common/platform/ipc";
 import { Message, MessageSender } from "@bitwarden/common/platform/messaging";
 // eslint-disable-next-line no-restricted-imports -- For dependency creation
@@ -45,7 +46,11 @@ import {
   DefaultStateEventRegistrarService,
   DefaultStateProvider,
 } from "@bitwarden/state-internal";
-import { SerializedMemoryStorageService, StorageServiceProvider } from "@bitwarden/storage-core";
+import {
+  SerializedMemoryStorageService,
+  StorageServiceProvider,
+  VaultStorage,
+} from "@bitwarden/storage-core";
 
 import { SSOLocalhostCallbackService } from "./auth/services/sso-localhost-callback.service";
 import { DesktopAutofillMain } from "./autofill/main/main-desktop-autofill.service";
@@ -76,6 +81,7 @@ import { CachedBackend } from "./platform/main/storage/cached-backend";
 import { ElectronStoreBackend } from "./platform/main/storage/electron-store-backend";
 import { VersionMain } from "./platform/main/version.main";
 import { DesktopSettingsService } from "./platform/services/desktop-settings.service";
+import { DesktopVaultStorage } from "./platform/services/desktop-vault-storage";
 import { ElectronLogMainService } from "./platform/services/electron-log.main.service";
 import { EphemeralValueStorageService } from "./platform/services/ephemeral-value-storage.main.service";
 import { I18nMainService } from "./platform/services/i18n.main.service";
@@ -87,6 +93,8 @@ export class Main {
   logService: ElectronLogMainService;
   i18nService: I18nMainService;
   storageService: ElectronStorageService;
+  /** Platform contract (ADR-0001) registered for the main process. */
+  vaultStorage: VaultStorage;
   memoryStorageService: MemoryStorageService;
   memoryStorageForStateProviders: SerializedMemoryStorageService;
   messagingService: MessageSender;
@@ -177,6 +185,8 @@ export class Main {
     this.logService = new ElectronLogMainService(null, app.getPath("userData"), flightRecorder);
 
     this.storageService = new ElectronStorageService(storageBackend);
+    this.vaultStorage = new DesktopVaultStorage(this.storageService);
+    validatePlatformContracts("desktop main process", { VaultStorage: this.vaultStorage });
     this.memoryStorageService = new MemoryStorageService();
     this.memoryStorageForStateProviders = new SerializedMemoryStorageService();
     const storageServiceProvider = new StorageServiceProvider(

@@ -10,3 +10,4 @@ export * from "./storage-service.provider";
 export { StorageService as AbstractStorageService } from "./storage.service";
 export * from "./storage.service";
 export * from "./vault-storage";
+export * from "./secure-storage";

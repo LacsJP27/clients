@@ -1,5 +1,5 @@
 {
-  "//": "Type-checks the VaultStorage contract, its suite, and InMemoryVaultStorage with no platform types. Run via `npm run lint:platform-neutral`.",
+  "//": "Type-checks the storage contracts, their suites, adapters, and reference implementations with no platform types. Run via `npm run lint:platform-neutral`.",
   "compilerOptions": {
     "target": "ES2022",
     "module": "ES2022",
@@ -10,9 +10,19 @@
     "noEmit": true,
     "skipLibCheck": true,
     "paths": {
-      "@bitwarden/storage-core": ["../storage-core/src/vault-storage/index.ts"]
+      "@bitwarden/storage-core": ["./platform-neutral-storage-core.ts"]
     }
   },
-  "include": ["src/vault-storage-contract/**/*.ts", "../storage-core/src/vault-storage/**/*.ts"],
-  "exclude": ["src/vault-storage-contract/in-memory-vault-storage.contract.spec.ts"]
+  "include": [
+    "src/contract-testing/**/*.ts",
+    "src/vault-storage-contract/**/*.ts",
+    "src/secure-storage-contract/**/*.ts",
+    "../storage-core/src/vault-storage/**/*.ts",
+    "../storage-core/src/secure-storage/**/*.ts"
+  ],
+  "exclude": [
+    "src/**/in-memory-vault-storage.contract.spec.ts",
+    "src/**/vault-storage-adapter.contract.spec.ts",
+    "src/**/secure-storage-adapter.contract.spec.ts"
+  ]
 }

@@ -3,19 +3,6 @@ const os = require("os");
 const path = require("path");
 const fs = require("fs");
 
-function getFiles(dir) {
-  let results = [];
-  fs.readdirSync(dir).forEach((file) => {
-    file = path.join(dir, file);
-    const stat = fs.statSync(file);
-    if (stat && stat.isDirectory()) {
-      results = results.concat(getFiles(file));
-    } else {
-      results.push(file);
-    }
-  });
-  return results;
-}
 // Each tsc process resolves `tsconfig.base.json` path aliases into much of the monorepo and peaks
 // around 1 GB of memory, so cap concurrency by available memory as well as CPU cores.
 const estimatedMemoryPerProcessInBytes = 2 * 1024 ** 3;
@@ -55,17 +42,6 @@ concurrently(
     {
       // run the strict type check plugin until we're fully converted, then update tsconfig.json to use strict
       name: "typescript-strict-plugin",
-      command: "npx tsc-strict",
-    },
-    ...files.map((file) => ({
-      name: path.basename(path.dirname(file)),
-      command: `npx tsc --noEmit --project "${file}"`,
-    })),
-  ],
-  { maxProcesses: 2 },
-).result.catch(() => {
-  process.exitCode = 1;
-});
       command: `node ${typescriptStrictPluginPath}`,
     },
     ...files.map((file) => ({
@@ -74,4 +50,7 @@ concurrently(
     })),
   ],
   { maxProcesses },
-);
+).result.catch(() => {
+  // concurrently rejects when any type check fails; report that through the exit code.
+  process.exitCode = 1;
+});
