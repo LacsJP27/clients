@@ -136,6 +136,17 @@ export function runVaultStorageContract<S extends VaultStorage>(
         assertDeepEqual(await storage.get(OTHER_KEY), "second", "get(OTHER_KEY)");
       });
 
+      it("accepts keys containing spaces and non-ASCII characters", async () => {
+        const keys = ["key with spaces", "clé-ключ-鍵"];
+        for (const key of keys) {
+          await storage.save(key, key);
+        }
+        for (const key of keys) {
+          assertDeepEqual(await storage.get(key), key, `get(${key})`);
+          assertDeepEqual(await storage.has(key), true, `has(${key})`);
+        }
+      });
+
       it("treats saving null as remove", async () => {
         await storage.save(KEY, "value");
         await storage.save(KEY, null);
@@ -302,6 +313,16 @@ export function runVaultStorageContract<S extends VaultStorage>(
         assertDeepEqual(first.updates, second.updates, "both subscribers see the same change");
       });
 
+      it("gives each subscriber its own copy of the values", async () => {
+        const mutating = storage.updates$.subscribe((update) => {
+          (update.newValue as { n: number }).n = 99;
+        });
+        subscriptions.push(mutating);
+        const { updates } = recordUpdates();
+        await storage.save(KEY, { n: 1 });
+        assertDeepEqual(updates[0].newValue, { n: 1 }, "value seen by the second subscriber");
+      });
+
       it("stops notifying after unsubscribe, without affecting other subscribers", async () => {
         const stopped = recordUpdates();
         const kept = recordUpdates();
@@ -324,6 +345,17 @@ export function runVaultStorageContract<S extends VaultStorage>(
         const { updates } = recordUpdates();
         await storage.save(KEY, { b: [1, 2], a: 1 });
         assertDeepEqual(updates, [], "updates for a no-op save");
+      });
+
+      it("notifies when only the order of an array changes", async () => {
+        await storage.save(KEY, [1, 2]);
+        const { updates } = recordUpdates();
+        await storage.save(KEY, [2, 1]);
+        assertDeepEqual(
+          updates,
+          [{ key: KEY, updateType: "save", oldValue: [1, 2], newValue: [2, 1] }],
+          "updates for a reordered array",
+        );
       });
 
       it("does not notify when removing a missing key", async () => {
@@ -389,6 +421,11 @@ export function runVaultStorageContract<S extends VaultStorage>(
         ["a cyclic object", cyclic],
         ["an object containing a function", { ok: 1, nested: { callback: () => 1 } }],
         ["an array containing a symbol", [1, Symbol("s")]],
+        ["an array containing undefined", [1, undefined]],
+        ["a Date", new Date(0)],
+        ["a Map", new Map([["a", 1]])],
+        ["a Set", new Set([1])],
+        ["a class instance", new (class Example {})()],
       ];
       for (const [label, value] of unserializable) {
         it(`rejects ${label} with NOT_SERIALIZABLE and keeps the previous value`, async () => {
@@ -535,6 +572,20 @@ export function runVaultStorageContract<S extends VaultStorage>(
         assertDeepEqual(settled, ["save 1", "remove", "save 2"], "settle order");
         assertDeepEqual(await storage.get(KEY), 2, "final value");
       });
+
+      withHook(
+        "unavailableOnSave",
+        "runs the operations queued behind a failed save",
+        async (hook) => {
+          await hook(storage, KEY);
+          const failed = storage.save(KEY, "first");
+          const queued = storage.save(KEY, "second");
+          const read = storage.get(KEY);
+          await assertRejectsWith(() => failed, VaultStorageErrorCode.Unavailable, "first save");
+          await queued;
+          assertDeepEqual(await read, "second", "read issued after both saves");
+        },
+      );
 
       it("lets a read issued after a write, without awaiting it, observe that write", async () => {
         const write = storage.save(KEY, "value");
