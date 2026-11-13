@@ -52,7 +52,9 @@ class QueuedVaultStorage extends VaultStorage {
     }
     let serialized: string;
     try {
-      serialized = JSON.stringify(value, rejectNonJson);
+      // Serializing first rejects cycles and bigints, so the check below always terminates.
+      serialized = JSON.stringify(value);
+      assertJsonData(value);
     } catch (error) {
       return Promise.reject(
         new VaultStorageError(VaultStorageErrorCode.NotSerializable, undefined, { cause: error }),
@@ -95,15 +97,26 @@ class QueuedVaultStorage extends VaultStorage {
   }
 }
 
-function rejectNonJson(_key: string, value: unknown): unknown {
-  if (
-    typeof value === "function" ||
-    typeof value === "symbol" ||
-    (typeof value === "number" && !Number.isFinite(value))
-  ) {
-    throw new TypeError("not JSON data");
+/** Throws for anything that is not plain JSON data, including what JSON would silently convert. */
+function assertJsonData(value: unknown): void {
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return;
   }
-  return value;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach(assertJsonData);
+    return;
+  }
+  const prototype = typeof value === "object" ? Object.getPrototypeOf(value) : undefined;
+  if (prototype === Object.prototype || prototype === null) {
+    Object.values(value as object)
+      .filter((child) => child !== undefined)
+      .forEach(assertJsonData);
+    return;
+  }
+  throw new TypeError("not JSON data");
 }
 
 function sortedJson(serialized: string): string {
