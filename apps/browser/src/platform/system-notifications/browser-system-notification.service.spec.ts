@@ -73,6 +73,97 @@ describe("BrowserSystemNotificationService", () => {
     });
   });
 
+  describe("status", () => {
+    let originalNotifications: typeof chrome.notifications;
+
+    beforeEach(() => {
+      originalNotifications = (global as any).chrome.notifications;
+    });
+
+    afterEach(() => {
+      (global as any).chrome.notifications = originalNotifications;
+    });
+
+    it("returns supported with this service when chrome.notifications exists", () => {
+      const status = service.status();
+
+      expect(status).toEqual({ type: "supported", service });
+      expect(status.type === "supported" && status.service).toBe(service);
+    });
+
+    it("returns not-supported with client-not-supported reason when chrome.notifications is missing", () => {
+      delete (global as any).chrome.notifications;
+
+      expect(service.status()).toEqual({
+        type: "not-supported",
+        reason: "client-not-supported",
+      });
+    });
+
+    it("reflects changes in notification API availability between calls", () => {
+      expect(service.status().type).toBe("supported");
+
+      delete (global as any).chrome.notifications;
+      expect(service.status().type).toBe("not-supported");
+
+      (global as any).chrome.notifications = originalNotifications;
+      expect(service.status().type).toBe("supported");
+    });
+
+    it("agrees with isSupported", () => {
+      expect(service.status().type === "supported").toBe(service.isSupported());
+
+      delete (global as any).chrome.notifications;
+      expect(service.status().type === "supported").toBe(service.isSupported());
+    });
+
+    it("returns a consistent result across repeated calls", () => {
+      const first = service.status();
+      const second = service.status();
+
+      expect(second).toEqual(first);
+    });
+
+    it("does not call into the notifications API or platform utils", () => {
+      service.status();
+
+      expect(chrome.notifications.create).not.toHaveBeenCalled();
+      expect(chrome.notifications.clear).not.toHaveBeenCalled();
+      expect(platformUtilsService.getDevice).not.toHaveBeenCalled();
+    });
+
+    it("does not mutate the chrome.notifications object", () => {
+      const notificationsBefore = chrome.notifications;
+      const keysBefore = Object.keys(chrome.notifications);
+
+      service.status();
+
+      expect(chrome.notifications).toBe(notificationsBefore);
+      expect(Object.keys(chrome.notifications)).toEqual(keysBefore);
+    });
+
+    it("does not affect notificationClicked$ subscriptions", () => {
+      const events: unknown[] = [];
+      const subscription = service.notificationClicked$.subscribe((evt) => events.push(evt));
+
+      service.status();
+      onClicked.emit("nid-status");
+
+      expect(events).toEqual([
+        { id: "nid-status", buttonIdentifier: ButtonLocation.NotificationButton },
+      ]);
+      subscription.unsubscribe();
+    });
+
+    it("leaves the service usable after reporting supported", async () => {
+      service.status();
+
+      const id = await service.create({ id: "after-status", title: "T", body: "B", buttons: [] });
+
+      expect(id).toBe("after-status");
+    });
+  });
+
   describe("create", () => {
     it("passes id and options with buttons on non-Firefox", async () => {
       const createInfo = {
